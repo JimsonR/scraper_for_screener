@@ -83,6 +83,34 @@ def download_file(url, save_path):
     - If the response is HTML or other text, save as .html rather than .pdf/.aspx.
     """
     try:
+        # Special handling for India Ratings press releases to preserve formatting
+        if 'indiaratings.co.in' in url and 'pressrelease' in url.lower():
+            print(f"    [IndiaRatings] Detected press release URL: {url}")
+            try:
+                from india_ratings_scraper import scrape_india_ratings_press_release
+
+                # Use the target folder (parent of save_path) for outputs
+                output_folder = save_path.parent
+                print(f"    [IndiaRatings] Output folder: {output_folder}")
+                result = scrape_india_ratings_press_release(url, output_folder)
+
+                print(f"    ✓ India Ratings press release scraped with formatting: {result['markdown_file'].name}")
+                return True
+            except Exception as e:
+                print(f"    ! India Ratings scraper failed: {type(e).__name__}: {e}")
+                # fall through to normal download
+                # Special handling for CRISIL HTML rationales
+        if 'crisil.com' in url and url.lower().endswith('.html'):
+            try:
+                from crisil_scraper import scrape_crisil_rationale
+                output_folder = save_path.parent
+                result = scrape_crisil_rationale(url, output_folder)
+                print(f"    ✓ CRISIL rationale scraped with formatting: {result['markdown_file'].name}")
+                return True
+            except Exception as e:
+                print(f"    ! CRISIL scraper failed ({e}); falling back to normal download...")
+
+
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
@@ -894,6 +922,7 @@ def scrape_screener_company(symbol):
                 continue
 
             print(f"  Downloading [{category}]: {filename[:80]} ...")
+            print(f"    [Debug] URL: {full_url}")
             if download_file(full_url, save_path):
                 download_stats[category] = download_stats.get(category, 0) + 1
 
