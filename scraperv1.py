@@ -187,17 +187,17 @@ def check_paywall(soup):
 def expand_all_accordions(driver):
     """Click all plus symbols and expand all accordion sections - ENHANCED VERSION."""
     print("Expanding all accordion sections...")
-    
+
+    # We'll make multiple passes with scrolling and JavaScript to minimize any leftover + icons.
     time.sleep(2)
-    
-    # Strategy 1: Click all elements with plus symbol or expand indicators
-    print("  Looking for expand buttons...")
-    
-    # Enhanced selectors for expand buttons
+
+    # Strategy 1: Repeatedly scan for expand/plus elements while scrolling the page
+    print("  Looking for expand buttons with repeated passes...")
+
     expand_selectors = [
         "button.button-plain",
         "span.icon-plus",
-        "i.icon-plus", 
+        "i.icon-plus",
         "[class*='plus']",
         "[class*='expand']",
         "button[title*='expand']",
@@ -205,38 +205,66 @@ def expand_all_accordions(driver):
         "a[onclick*='expand']",
         ".toggle",
         "[data-toggle='collapse']",
-        "button:has(.icon-plus)",  # Buttons containing plus icons
-        "button[aria-expanded='false']",  # ARIA expanded buttons
+        "button[aria-expanded='false']",
     ]
-    
+
     total_clicked = 0
-    
-    for selector in expand_selectors:
-        try:
-            elements = driver.find_elements(By.CSS_SELECTOR, selector)
-            
+
+    try:
+        page_height = driver.execute_script("return document.body.scrollHeight || 0;") or 0
+    except Exception:
+        page_height = 0
+
+    # Do a few passes from top to bottom; this helps catch elements that appear only after others expand
+    max_passes = 3
+    for p in range(max_passes):
+        print(f"    Pass {p+1}/{max_passes} for expand buttons...")
+
+        # Scroll in steps to ensure lazy content loads
+        if page_height > 0:
+            steps = max(10, min(25, page_height // 300))
+            for i in range(steps + 1):
+                y = int(page_height * i / max(steps, 1))
+                try:
+                    driver.execute_script("window.scrollTo(0, arguments[0]);", y)
+                except Exception:
+                    break
+                time.sleep(0.3)
+
+        for selector in expand_selectors:
+            try:
+                elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            except Exception:
+                continue
+
             for elem in elements:
                 try:
-                    if elem.is_displayed() and elem.is_enabled():
-                        # Scroll into view
-                        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
-                        time.sleep(0.2)
-                        
-                        # Try to click
+                    if not (elem.is_displayed() and elem.is_enabled()):
+                        continue
+
+                    # Skip if aria-expanded already true
+                    aria = (elem.get_attribute('aria-expanded') or '').lower()
+                    if aria == 'true':
+                        continue
+
+                    driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", elem)
+                    time.sleep(0.2)
+
+                    try:
+                        elem.click()
+                    except Exception:
                         try:
-                            elem.click()
-                        except:
                             driver.execute_script("arguments[0].click();", elem)
-                        
-                        total_clicked += 1
-                        time.sleep(0.3)
-                except:
-                    pass
-        except Exception as e:
-            pass
-    
+                        except Exception:
+                            continue
+
+                    total_clicked += 1
+                    time.sleep(0.3)
+                except Exception:
+                    continue
+
     print(f"  Clicked {total_clicked} expand buttons")
-    
+
     # Strategy 2: Execute JavaScript to expand all hidden rows
     print("  Executing JavaScript to show hidden content...")
     
